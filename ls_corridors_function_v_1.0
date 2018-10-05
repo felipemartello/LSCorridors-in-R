@@ -1,0 +1,395 @@
+lscorricors<-function(resist,st,st_id,var,scl,MP,MLavg,MLmin,MLmax){
+  
+  dir.create(output_fld)
+  dir.create(paste(output_fld,"shapes",sep="\\"))
+   
+  #Initiating GRASS
+  initGRASS(gisBase = dir.grass, home=getwd(), gisDbase=getwd(),override=TRUE)
+
+  name_fold<-paste(output_fld,"shapes",sep="\\")
+  
+  #raster for calculing euclidean distance
+  r.mask<-resist
+  r.mask[]<-1
+  writeRAST(as(r.mask, "SpatialGridDataFrame"), "mask")
+  execGRASS("g.region",raster = "mask")
+  
+  #creating rasters for rsfi 
+  rsfi_mp<-resist
+  rsfi_mp[]<-0
+  rsfi_avg<-resist
+  rsfi_avg[]<-0
+  rsfi_min<-resist
+  rsfi_min[]<-0
+  rsfi_max<-resist
+  rsfi_max[]<-0
+  
+
+  #st_pairs
+  st_pairs<-matrix(st_id, ncol=2,byrow = T)
+  
+  #MP----
+  #creating_pairs_coordinates
+  st_coord<-data.frame()
+  
+  for (j in 1:nrow(st_pairs)){
+    s_map<-st
+    s_map[s_map!=st_pairs[j,1]]<-NA
+    s_smpl<-sampleRandom(s_map,MP,na.rm=T,xy=T)
+    colnames(s_smpl)<-c("s_x","s_y","s_id")
+    
+    t_map<-st
+    t_map[t_map!=st_pairs[j,2]]<-NA
+    t_smpl<-sampleRandom(t_map,MP,na.rm=T,xy=T)
+    colnames(t_smpl)<-c("t_x","t_y","t_id")
+      
+    temp_coord<-data.frame(cbind(s_smpl,t_smpl),rep=1:MP  )
+    
+    st_coord<-rbind(st_coord,temp_coord)
+  }
+  
+  #creating descriptive columns
+  st_coord$euc_dist<-NA
+  st_coord$cost<-NA
+  st_coord$length<-NA
+  
+  
+  for (i in 1:nrow(st_coord)){#
+
+    foo<-length(resist[])
+
+    jitter_val<-runif(foo,0.5,var)
+    
+    new_map<-resist
+    new_map<-new_map+jitter_val
+    new_map<-new_map/max(na.omit(new_map[]))*100
+
+    s.coord<-c(st_coord[i,1],st_coord[i,2])
+    t.coord<-c(st_coord[i,4],st_coord[i,5])
+    
+    writeRAST(as(new_map, "SpatialGridDataFrame"), "resist", flags = c("overwrite"))
+    
+    execGRASS("r.cost", flags="overwrite", parameters=list(input="resist", output="temp.corridor", start_coordinates=s.coord,stop_coordinates=t.coord) )
+    execGRASS('r.drain',flags="overwrite", parameters=list(input='temp.corridor', output='corridor', start_coordinates=t.coord))
+    
+    r_corridor<-raster(readRAST("corridor"))
+    r_corridor[is.na(r_corridor)]<-0
+
+    rsfi_mp<-rsfi_mp+r_corridor
+
+    writeRAST(as(r.mask, "SpatialGridDataFrame"), "mask", flags = c("overwrite"))
+    
+    execGRASS("r.cost", flags="overwrite", parameters=list(input="mask", output="temp.null.corridor", start_coordinates=s.coord,stop_coordinates=t.coord) )
+    execGRASS('r.drain',flags="overwrite", parameters=list(input='temp.null.corridor', output='null.corridor', start_coordinates=t.coord))
+    execGRASS("r.to.vect",flags="overwrite", parameters=list(input='null.corridor',output="v_null",type="line"))
+    execGRASS("v.db.addcolumn", parameters = list(map="v_null", columns="length double precision"))
+    execGRASS("v.to.db", parameters=list(map="v_null",type="line",option="length",columns="length"))
+    null_corridor<-readVECT("v_null")
+    st_coord[i,8]<-sum(null_corridor@data$length)
+    
+    rst_corr<-(r_corridor*new_map)[]
+    st_coord[i,9]<-sum(na.omit(rst_corr))
+    
+    name_corridors<-paste("S",st_coord[i,3],"T",st_coord[i,6],"MP",st_coord[i,7],sep="_")
+    
+    execGRASS("r.to.vect",flags="overwrite", parameters=list(input='corridor',output=name_corridors,type="line"))
+    execGRASS("v.db.addcolumn", parameters = list(map=name_corridors, columns="length double precision"))
+    execGRASS("v.to.db", parameters=list(map=name_corridors,type="line",option="length",columns="length"))
+    
+    shp_corridor<-readVECT(name_corridors)
+    
+    st_coord[i,10]<-sum(shp_corridor@data$length)
+
+    crs(shp_corridor)<-crs(resist)
+    
+    writeOGR(shp_corridor,name_fold,name_corridors,driver="ESRI Shapefile")
+    
+  }
+
+  tab_mp<-st_coord
+  method<-"MP"
+  tab_mp<-cbind(method,tab_mp)
+  
+  
+  #MLavg----
+  #creating_pairs_coordinates
+  
+  st_coord<-data.frame()
+  
+  for (j in 1:nrow(st_pairs)){
+    s_map<-st
+    s_map[s_map!=st_pairs[j,1]]<-NA
+    s_smpl<-sampleRandom(s_map,MLavg,na.rm=T,xy=T) #aki
+    colnames(s_smpl)<-c("s_x","s_y","s_id")
+    
+    t_map<-st
+    t_map[t_map!=st_pairs[j,2]]<-NA
+    t_smpl<-sampleRandom(t_map,MLavg,na.rm=T,xy=T) #aki
+    colnames(t_smpl)<-c("t_x","t_y","t_id")
+    
+    temp_coord<-data.frame(cbind(s_smpl,t_smpl),rep=1:MLavg  ) #aki
+    
+    st_coord<-rbind(st_coord,temp_coord)
+  }
+  
+  #calculing euclidean distance
+  st_coord$euc_dist<-NA
+  st_coord$cost<-NA
+  st_coord$length<-NA
+
+  
+  for (i in 1:nrow(st_coord)){
+    foo<-length(resist[])
+    
+    jitter_val<-runif(foo,0.5,var)
+    
+    jitter_map<-resist
+    jitter_map[]<-jitter_val
+    
+    new.resist<-resist+jitter_map
+    
+    s.coord<-c(st_coord[i,1],st_coord[i,2])
+    t.coord<-c(st_coord[i,4],st_coord[i,5])
+    
+    writeRAST(as(new.resist, "SpatialGridDataFrame"), "resist", flags = c("overwrite"))
+    
+    m.sz<-round(scl/res(resist)[1])
+    if(m.sz %% 2 == 0){m.sz<-m.sz+1}
+    
+    execGRASS("r.neighbors", flags="overwrite", parameters=list(input="resist", output="resist_scl", method="average", size=as.integer(m.sz)) )
+   
+    execGRASS("r.cost", flags="overwrite", parameters=list(input="resist_scl", output="temp.corridor", start_coordinates=s.coord,stop_coordinates=t.coord) )
+    execGRASS('r.drain',flags="overwrite", parameters=list(input='temp.corridor', output='corridor', start_coordinates=t.coord))
+    
+    r_corridor<-raster(readRAST("corridor"))
+    r_corridor[is.na(r_corridor)]<-0
+    rsfi_avg<-rsfi_avg+r_corridor
+    
+    
+    
+    execGRASS("r.cost", flags="overwrite", parameters=list(input="mask", output="temp.null.corridor", start_coordinates=s.coord,stop_coordinates=t.coord) )
+    execGRASS('r.drain',flags="overwrite", parameters=list(input='temp.null.corridor', output='null.corridor', start_coordinates=t.coord))
+    execGRASS("r.to.vect",flags="overwrite", parameters=list(input='null.corridor',output="v_null",type="line"))
+    execGRASS("v.db.addcolumn", parameters = list(map="v_null", columns="length double precision"))
+    execGRASS("v.to.db", parameters=list(map="v_null",type="line",option="length",columns="length"))
+    null_corridor<-readVECT("v_null")
+    st_coord[i,8]<-sum(null_corridor@data$length)
+    
+    rst_corr<-(r_corridor*resist)[] #change to jitter map
+    st_coord[i,9]<-sum(na.omit(rst_corr))
+    
+    name_corridors<-paste("S",st_coord[i,3],"T",st_coord[i,6],"MLavg",st_coord[i,7],sep="_") #aki
+    
+    execGRASS("r.to.vect",flags="overwrite", parameters=list(input='corridor',output=name_corridors,type="line"))
+    execGRASS("v.db.addcolumn", parameters = list(map=name_corridors, columns="length double precision"))
+    execGRASS("v.to.db", parameters=list(map=name_corridors,type="line",option="length",columns="length"))
+    
+    shp_corridor<-readVECT(name_corridors)
+    
+    st_coord[i,10]<-sum(shp_corridor@data$length)
+    
+    crs(shp_corridor)<-crs(resist)
+    
+    writeOGR(shp_corridor,name_fold,name_corridors,driver="ESRI Shapefile")
+    
+  }
+  
+  tab_avg<-st_coord
+  method<-"MLavg"
+  tab_avg<-cbind(method,tab_avg)
+  
+  
+  
+  #MLmin----
+  #creating_pairs_coordinates
+  
+  st_coord<-data.frame()
+  
+  for (j in 1:nrow(st_pairs)){
+    s_map<-st
+    s_map[s_map!=st_pairs[j,1]]<-NA
+    s_smpl<-sampleRandom(s_map,MLmin,na.rm=T,xy=T) #aki
+    colnames(s_smpl)<-c("s_x","s_y","s_id")
+    
+    t_map<-st
+    t_map[t_map!=st_pairs[j,2]]<-NA
+    t_smpl<-sampleRandom(t_map,MLmin,na.rm=T,xy=T) #aki
+    colnames(t_smpl)<-c("t_x","t_y","t_id")
+    
+    temp_coord<-data.frame(cbind(s_smpl,t_smpl),rep=1:MLmin  ) #aki
+    
+    st_coord<-rbind(st_coord,temp_coord)
+  }
+  
+  #calculing euclidean distance
+  st_coord$euc_dist<-NA
+  st_coord$cost<-NA
+  st_coord$length<-NA
+  
+  b.st_coord<-st_coord
+  st_coord<-b.st_coord
+  
+
+  for (i in 1:nrow(st_coord)){
+    foo<-length(resist[])
+    
+    jitter_val<-runif(foo,0.5,var)
+    
+    jitter_map<-resist
+    jitter_map[]<-jitter_val
+    
+    new.resist<-resist+jitter_map
+
+    s.coord<-c(st_coord[i,1],st_coord[i,2])
+    t.coord<-c(st_coord[i,4],st_coord[i,5])
+    
+    writeRAST(as(new.resist, "SpatialGridDataFrame"), "resist", flags = c("overwrite"))
+    
+    m.sz<-round(scl/res(resist)[1])
+    if(m.sz %% 2 == 0){m.sz<-m.sz+1}
+    
+    execGRASS("r.neighbors", flags="overwrite", parameters=list(input="resist", output="resist_scl", method="minimum", size=as.integer(m.sz)) )
+    
+    execGRASS("r.cost", flags="overwrite", parameters=list(input="resist_scl", output="temp.corridor", start_coordinates=s.coord,stop_coordinates=t.coord) )
+    execGRASS('r.drain',flags="overwrite", parameters=list(input='temp.corridor', output='corridor', start_coordinates=t.coord))
+    
+    r_corridor<-raster(readRAST("corridor"))
+    r_corridor[is.na(r_corridor)]<-0
+    rsfi_min<-rsfi_min+r_corridor
+    
+    execGRASS("r.cost", flags="overwrite", parameters=list(input="mask", output="temp.null.corridor", start_coordinates=s.coord,stop_coordinates=t.coord) )
+    execGRASS('r.drain',flags="overwrite", parameters=list(input='temp.null.corridor', output='null.corridor', start_coordinates=t.coord))
+    execGRASS("r.to.vect",flags="overwrite", parameters=list(input='null.corridor',output="v_null",type="line"))
+    execGRASS("v.db.addcolumn", parameters = list(map="v_null", columns="length double precision"))
+    execGRASS("v.to.db", parameters=list(map="v_null",type="line",option="length",columns="length"))
+    null_corridor<-readVECT("v_null")
+    st_coord[i,8]<-sum(null_corridor@data$length)
+    
+    rst_corr<-(r_corridor*resist)[]
+    st_coord[i,9]<-sum(na.omit(rst_corr))
+    
+    name_corridors<-paste("S",st_coord[i,3],"T",st_coord[i,6],"MLmin",st_coord[i,7],sep="_") #aki
+    
+    execGRASS("r.to.vect",flags="overwrite", parameters=list(input='corridor',output=name_corridors,type="line"))
+    execGRASS("v.db.addcolumn", parameters = list(map=name_corridors, columns="length double precision"))
+    execGRASS("v.to.db", parameters=list(map=name_corridors,type="line",option="length",columns="length"))
+    
+    shp_corridor<-readVECT(name_corridors)
+    
+    st_coord[i,10]<-sum(shp_corridor@data$length)
+    
+    crs(shp_corridor)<-crs(resist)
+    
+     writeOGR(shp_corridor,name_fold,name_corridors,driver="ESRI Shapefile")
+    
+  }
+  
+  tab_min<-st_coord
+  method<-"MLmin"
+  tab_min<-cbind(method,tab_min)
+  
+ 
+  
+  #MLmax----
+  #creating_pairs_coordinates
+  
+  st_coord<-data.frame()
+  
+  for (j in 1:nrow(st_pairs)){
+    s_map<-st
+    s_map[s_map!=st_pairs[j,1]]<-NA
+    s_smpl<-sampleRandom(s_map,MLmax,na.rm=T,xy=T) #aki
+    colnames(s_smpl)<-c("s_x","s_y","s_id")
+    
+    t_map<-st
+    t_map[t_map!=st_pairs[j,2]]<-NA
+    t_smpl<-sampleRandom(t_map,MLmax,na.rm=T,xy=T) #aki
+    colnames(t_smpl)<-c("t_x","t_y","t_id")
+    
+    temp_coord<-data.frame(cbind(s_smpl,t_smpl),rep=1:MLmax  ) #aki
+    
+    st_coord<-rbind(st_coord,temp_coord)
+  }
+  
+  #calculing euclidean distance
+  st_coord$euc_dist<-NA
+  st_coord$cost<-NA
+  st_coord$length<-NA
+  
+  b.st_coord<-st_coord
+  st_coord<-b.st_coord
+  
+  #corridor_stack<-stack(resist)
+  
+  for (i in 1:nrow(st_coord)){
+    foo<-length(resist[])
+    
+    jitter_val<-runif(foo,0.5,var)
+    
+    jitter_map<-resist
+    jitter_map[]<-jitter_val
+    
+    new.resist<-resist+jitter_map
+    
+    s.coord<-c(st_coord[i,1],st_coord[i,2])
+    t.coord<-c(st_coord[i,4],st_coord[i,5])
+    
+    writeRAST(as(new.resist, "SpatialGridDataFrame"), "resist", flags = c("overwrite"))
+    execGRASS("g.region",raster = "resist")
+    
+    m.sz<-round(scl/res(resist)[1])
+    if(m.sz %% 2 == 0){m.sz<-m.sz+1}
+    
+    execGRASS("r.neighbors", flags="overwrite", parameters=list(input="resist", output="resist_scl", method="minimum", size=as.integer(m.sz)) )
+    
+    execGRASS("r.cost", flags="overwrite", parameters=list(input="resist_scl", output="temp.corridor", start_coordinates=s.coord,stop_coordinates=t.coord) )
+    execGRASS('r.drain',flags="overwrite", parameters=list(input='temp.corridor', output='corridor', start_coordinates=t.coord))
+    
+    r_corridor<-raster(readRAST("corridor"))
+    r_corridor[is.na(r_corridor)]<-0
+    rsfi_max<-rsfi_max+r_corridor
+    
+    execGRASS("r.cost", flags="overwrite", parameters=list(input="mask", output="temp.null.corridor", start_coordinates=s.coord,stop_coordinates=t.coord) )
+    execGRASS('r.drain',flags="overwrite", parameters=list(input='temp.null.corridor', output='null.corridor', start_coordinates=t.coord))
+    execGRASS("r.to.vect",flags="overwrite", parameters=list(input='null.corridor',output="v_null",type="line"))
+    execGRASS("v.db.addcolumn", parameters = list(map="v_null", columns="length double precision"))
+    execGRASS("v.to.db", parameters=list(map="v_null",type="line",option="length",columns="length"))
+    null_corridor<-readVECT("v_null")
+    st_coord[i,8]<-sum(null_corridor@data$length)
+    
+    rst_corr<-(r_corridor*resist)[]
+    st_coord[i,9]<-sum(na.omit(rst_corr))
+    
+    name_corridors<-paste("S",st_coord[i,3],"T",st_coord[i,6],"MLmax",st_coord[i,7],sep="_") #aki
+    
+    execGRASS("r.to.vect",flags="overwrite", parameters=list(input='corridor',output=name_corridors,type="line"))
+    execGRASS("v.db.addcolumn", parameters = list(map=name_corridors, columns="length double precision"))
+    execGRASS("v.to.db", parameters=list(map=name_corridors,type="line",option="length",columns="length"))
+    
+    shp_corridor<-readVECT(name_corridors)
+    
+    st_coord[i,10]<-sum(shp_corridor@data$length)
+    
+    crs(shp_corridor)<-crs(resist)
+    
+    writeOGR(shp_corridor,name_fold,name_corridors,driver="ESRI Shapefile")
+    
+  }
+  
+  tab_max<-st_coord
+  method<-"MLmax"
+  tab_max<-cbind(method,tab_max)
+  
+  
+
+  stat_corr<-rbind(tab_mp,tab_avg,tab_max,tab_min)
+  setwd(output_fld)
+  write.table(stat_corr,"descriptive_stats.txt",row.names = F)
+  
+  writeRaster(rsfi_mp,"rsfi_MP.tif")
+  writeRaster(rsfi_avg,"rsfi_MLavg.tif")
+  writeRaster(rsfi_min,"rsfi_MLmin.tif")
+  writeRaster(rsfi_max,"rsfi_MLmax.tif")
+  
+  
+  }
