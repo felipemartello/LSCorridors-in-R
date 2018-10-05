@@ -1,6 +1,6 @@
 # LSCorridors-in-R
 Adaptation of LScorridors algorithm for R language.
-The algorithm, originally developed in python language, simulate ecological corridors regarding organism landscape perspective.
+The algorithm, originally developed in python language, simulates ecological corridors regarding organism landscape perspective.
 Adapted by Felipe Martello
 
 Citation:
