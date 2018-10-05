@@ -1,3 +1,5 @@
+LScorridors in R - v1.0 - developed by Felipe Martello - felipemartello@gmail.com
+
 lscorricors<-function(resist,st,st_id,var,scl,MP,MLavg,MLmin,MLmax){
   
   dir.create(output_fld)
