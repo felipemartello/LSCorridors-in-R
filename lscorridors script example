@@ -5,7 +5,6 @@ library(raster)
 library(sp)
 library(rgrass7)
 library(rgdal)
-library(gmt)
 
 #SETTING FOLDERS
 setwd("C:\\LScorridors_R_v1.0") #setting working director
