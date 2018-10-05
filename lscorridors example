@@ -1,0 +1,33 @@
+#Example to use LScorridors in R - v1.0 - Felipe Martello - felipemartello@gmail.com
+
+#REQUIRED PACKAGES
+library(raster)
+library(sp)
+library(rgrass7)
+library(rgdal)
+library(gmt)
+
+#SETTING FOLDERS
+setwd("C:\\LScorridors_R_v1.0") #setting working director
+dir.grass<-"C:\\Program Files\\GRASS GIS 7.4.0" #GRASS directory
+output_fld<-"C:\\LScorridors_R_v1.0\\output" #output folder (create automatically)
+
+#LOADING RASTERS
+resist<-raster("rst_map_exmpl.tif") #resistance raster 
+st<-raster("hbt_clump.tif") #raster with habitat patches identifyed by code (ID)  
+
+#NUMBER OF SIMULATION BY METHOD
+MP<-2 #method without landscape perspective
+MLavg<-2 #method regarding landscape resistance average (generalist organism)
+MLmin<-2 #method regarding landscape resistance minimum (oportunist organism)
+MLmax<-2 #method regarding landscape resistance maximun (restritive organism)
+
+#PARAMETERS
+var<-10 #levels of variation between corridors of the same method (we suggest that this value does not exceed 10% of the highest resistance)
+scl<-300 #landscape scale
+
+#SOURCE-TARGET PATHCES
+st_id<-c(2,69,14,54) #ID of the pairs of patches that shoud be connected (same code of the st raster) 
+
+#USING THE FUNCTION (function must be loaded before)
+lscorricors(resist,st,st_id,var,scl,MP,MLavg,MLmin,MLmax)
