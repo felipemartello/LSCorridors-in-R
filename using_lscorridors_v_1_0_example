@@ -6,28 +6,28 @@ library(sp)
 library(rgrass7)
 library(rgdal)
 
-#SETTING FOLDERS
+#SETTING WORKING DIRECTORY
 setwd("C:\\LScorridors_R_v1.0") #setting working director
 
-dir.grass<-"C:\\Program Files\\GRASS GIS 7.4.0" #GRASS directory
-output_fld<-"C:\\LScorridors_R_v1.0\\output" #output folder (create automatically)
-
-#LOADING RASTERS
-resist<-raster("rst_map_exmpl.tif") #resistance raster 
-st<-raster("hbt_clump.tif") #raster with habitat patches identifyed by code (ID)  
-
-#NUMBER OF SIMULATION BY METHOD
-MP<-2 #method without landscape perspective
-MLavg<-2 #method regarding landscape resistance average (generalist organism)
-MLmin<-2 #method regarding landscape resistance minimum (oportunist organism)
-MLmax<-2 #method regarding landscape resistance maximun (restritive organism)
+#INPUT FILES 
+resist  <-raster("rst_map_exmpl.tif") #resistance raster 
+st  <-raster("hbt_clump.tif") #raster with habitat patches identifyed by code (ID)
 
 #PARAMETERS
-var<-10 #levels of variation between corridors of the same method (we suggest that this value does not exceed 10% of the highest resistance)
-scl<-300 #landscape scale
+dir.grass  <-"C:\\Program Files\\GRASS GIS 7.4.0" # GRASS directory
+output_fld  <-"C:\\LScorridors_R_v1.0\\output" # output folder (create automatically)
+var  <-10 # levels of variation between corridors of the same method (we suggest that this value does not exceed 10% of the highest resistance)
+scl  <-300 # landscape scale
+st_id  <-c(2,69,14,54) #ID of the pairs of patches that shoud be connected (same code of the st raster)  
 
-#SOURCE-TARGET PATHCES
-st_id<-c(2,69,14,54) #ID of the pairs of patches that shoud be connected (same code of the st raster) 
+#NUMBER OF SIMULATION BY METHOD
+MP  <-2 #number of simulations for method without landscape perspective
+MLavg  <-2 #number of simulations for method regarding landscape resistance average (generalist organism)
+MLmin  <-2 #number of simulations for method regarding landscape resistance minimum (oportunist organism)
+MLmax  <-2 #number of simulations for method regarding landscape resistance maximun (restritive organism)
 
 #USING THE FUNCTION (function must be loaded before)
 lscorricors(resist,st,st_id,var,scl,MP,MLavg,MLmin,MLmax)
+
+#OUTPUT: function create: a) a shape file for each corridor simulated; b)RSFI raster for each method - a raster wherein pixels values 
+#indicates the number of simulated corridors that crossed the pixel; c) the file " .txt", describing corridors information
