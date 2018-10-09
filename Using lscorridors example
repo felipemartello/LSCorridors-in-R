@@ -1,4 +1,4 @@
-#Example to use LScorridors in R - v1.0 - Felipe Martello - felipemartello@gmail.com
+#Example of LScorridors in R (v1.0) use - by Felipe Martello - felipemartello@gmail.com
 
 #REQUIRED PACKAGES
 library(raster)
@@ -8,6 +8,7 @@ library(rgdal)
 
 #SETTING FOLDERS
 setwd("C:\\LScorridors_R_v1.0") #setting working director
+
 dir.grass<-"C:\\Program Files\\GRASS GIS 7.4.0" #GRASS directory
 output_fld<-"C:\\LScorridors_R_v1.0\\output" #output folder (create automatically)
 
